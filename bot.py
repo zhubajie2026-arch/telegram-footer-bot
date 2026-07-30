@@ -1,4 +1,7 @@
 import os
+import threading
+from http.server import HTTPServer, BaseHTTPRequestHandler
+
 from telegram import Update
 from telegram.ext import (
     Application,
@@ -8,15 +11,11 @@ from telegram.ext import (
 )
 
 
-# 从 Render 环境变量读取 Token
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 
-
-# 你的频道
 CHANNEL_ID = "@dsj7000"
 
 
-# 固定小尾巴
 FOOTER = """
 
 ━━━━━━━━━━━━━━
@@ -36,7 +35,21 @@ FOOTER = """
 """
 
 
-# 处理用户发送的信息
+# 给 Render 用的小网页
+class HealthCheck(BaseHTTPRequestHandler):
+
+    def do_GET(self):
+        self.send_response(200)
+        self.end_headers()
+        self.wfile.write(b"Bot is running")
+
+
+def run_web():
+    port = int(os.environ.get("PORT", 10000))
+    server = HTTPServer(("0.0.0.0", port), HealthCheck)
+    server.serve_forever()
+
+
 async def handle_message(
     update: Update,
     context: ContextTypes.DEFAULT_TYPE
@@ -48,7 +61,6 @@ async def handle_message(
         return
 
 
-    # 文字消息
     if msg.text:
 
         await context.bot.send_message(
@@ -57,7 +69,6 @@ async def handle_message(
         )
 
 
-    # 图片消息
     elif msg.photo:
 
         await context.bot.send_photo(
@@ -67,7 +78,6 @@ async def handle_message(
         )
 
 
-    # 视频消息
     elif msg.video:
 
         await context.bot.send_video(
@@ -77,12 +87,17 @@ async def handle_message(
         )
 
 
+# 启动网页端口
+threading.Thread(
+    target=run_web,
+    daemon=True
+).start()
 
-# 创建机器人
+
+# 启动 Telegram
 app = Application.builder().token(BOT_TOKEN).build()
 
 
-# 接收所有消息
 app.add_handler(
     MessageHandler(
         filters.ALL,
@@ -94,5 +109,4 @@ app.add_handler(
 print("机器人启动成功")
 
 
-# 启动
 app.run_polling()
