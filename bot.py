@@ -36,17 +36,22 @@ FOOTER = """
 """
 
 
-# Render端口
+# Render健康检测
+
 class HealthCheck(BaseHTTPRequestHandler):
 
     def do_GET(self):
+
         self.send_response(200)
         self.end_headers()
         self.wfile.write(b"OK")
 
+
     def do_HEAD(self):
+
         self.send_response(200)
         self.end_headers()
+
 
 
 def run_web():
@@ -62,29 +67,103 @@ def run_web():
 
 
 
-# 保存相册
+# 自动分类
+
+def get_tag(text):
+
+    categories = {
+
+        "#手机": [
+            "手机",
+            "iphone",
+            "苹果",
+            "华为",
+            "三星"
+        ],
+
+        "#电脑": [
+            "电脑",
+            "笔记本",
+            "macbook",
+            "台式机"
+        ],
+
+        "#车辆": [
+            "汽车",
+            "摩托",
+            "电动车",
+            "二手车"
+        ],
+
+        "#房产": [
+            "房",
+            "公寓",
+            "出租",
+            "租房"
+        ],
+
+        "#生活用品": [
+            "家具",
+            "家电",
+            "冰箱",
+            "洗衣机",
+            "生活用品"
+        ],
+
+        "#招聘": [
+            "招聘",
+            "工作",
+            "兼职",
+            "招人"
+        ]
+    }
+
+
+    text_lower = text.lower()
+
+
+    for tag, words in categories.items():
+
+        for word in words:
+
+            if word.lower() in text_lower:
+
+                return tag
+
+
+    return "#其他"
+
+
+
+# 相册缓存
+
 album_cache = {}
+
 
 
 async def send_album(group_id, context):
 
     await asyncio.sleep(5)
 
+
     album = album_cache.pop(group_id, None)
+
 
     if not album:
         return
 
 
     photos = album["photos"]
+
     caption = album["caption"]
 
 
     media = []
 
-    for index, photo in enumerate(photos):
 
-        if index == 0:
+    for i, photo in enumerate(photos):
+
+        if i == 0:
 
             media.append(
                 InputMediaPhoto(
@@ -109,7 +188,7 @@ async def send_album(group_id, context):
 
 
 
-# 消息处理
+
 
 async def handle(
     update: Update,
@@ -118,6 +197,7 @@ async def handle(
 
     msg = update.message
 
+
     if not msg:
         return
 
@@ -125,29 +205,39 @@ async def handle(
     print("收到消息")
 
 
-    # 相册
+
+    # 图片相册
 
     if msg.photo:
 
+
         if msg.media_group_id:
+
 
             group_id = msg.media_group_id
 
 
             if group_id not in album_cache:
 
+                caption = msg.caption or ""
+
+                tag = get_tag(caption)
+
+
                 album_cache[group_id] = {
+
                     "photos": [],
-                    "caption": msg.caption or ""
+
+                    "caption": tag + "\n\n" + caption
+
                 }
+
 
 
             album_cache[group_id]["photos"].append(
                 msg.photo[-1].file_id
             )
 
-
-            # 只创建一个发送任务
 
             if len(album_cache[group_id]["photos"]) == 1:
 
@@ -163,15 +253,21 @@ async def handle(
 
 
 
-        # 单张图片
-
         await context.bot.send_photo(
+
             chat_id=CHANNEL_ID,
+
             photo=msg.photo[-1].file_id,
-            caption=(msg.caption or "") + FOOTER
+
+            caption=(get_tag(msg.caption or "")
+                     + "\n\n"
+                     + (msg.caption or "")
+                     + FOOTER)
+
         )
 
         return
+
 
 
 
@@ -179,30 +275,55 @@ async def handle(
 
     if msg.video:
 
+
         await context.bot.send_video(
+
             chat_id=CHANNEL_ID,
+
             video=msg.video.file_id,
-            caption=(msg.caption or "") + FOOTER
+
+            caption=(get_tag(msg.caption or "")
+                     + "\n\n"
+                     + (msg.caption or "")
+                     + FOOTER)
+
         )
 
         return
 
 
 
+
     # 文字
+
 
     if msg.text:
 
+
+        tag = get_tag(msg.text)
+
+
         await context.bot.send_message(
+
             chat_id=CHANNEL_ID,
-            text=msg.text + FOOTER
+
+            text=tag
+            + "\n\n"
+            + msg.text
+            + FOOTER
+
         )
 
 
 
+
+
 threading.Thread(
+
     target=run_web,
+
     daemon=True
+
 ).start()
 
 
@@ -210,15 +331,23 @@ threading.Thread(
 app = Application.builder().token(BOT_TOKEN).build()
 
 
+
 app.add_handler(
+
     MessageHandler(
+
         filters.ALL,
+
         handle
+
     )
+
 )
 
 
+
 print("机器人启动成功")
+
 
 
 app.run_polling()
